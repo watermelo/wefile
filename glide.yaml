@@ -1,0 +1,3 @@
+package: wefile
+import:
+- package: github.com/gin-gonic/gin
