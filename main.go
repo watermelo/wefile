@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
+
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	. "wefile/log"
 
@@ -17,32 +18,35 @@ func main() {
 	r := gin.Default()
 
 	r.POST("/tran/:filetype", func(c *gin.Context) {
-		// 读取文件
 		file, handler, err := c.Request.FormFile("file")
 		if err != nil {
-			fmt.Println(err)
+			Error.Println(err)
 			return
 		}
 		defer file.Close()
 
-		// 建临时目录
-		tempfile, err := ioutil.TempFile(os.TempDir(), "wefile")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		tempfile, err := os.Create(handler.Filename)
 
 		io.Copy(tempfile, file)
-		tempfile.Close()
 
-		filename := tempfile.Name() + filepath.Ext(handler.Filename)
 		filetype := c.Param("filetype")
-		cmd := exec.Command("unoconv", "-f", filetype, filename)
+		cmd := exec.Command("unoconv", "-f", filetype, tempfile.Name())
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			Error.Println(err)
 		}
-		fmt.Println(string(out))
+		defer os.Remove(tempfile.Name())
+
+		outfileName := strings.Split(tempfile.Name(), ".")[0] + "." + filetype
+
+		defer os.Remove(outfileName)
+
+		dat, err := ioutil.ReadFile(outfileName)
+
+		c.Header("Content-Disposition", "attachment; filename=" + outfileName)
+		c.Header("Content-Type", "application/text/plain")
+		c.Header("Accept-Length", fmt.Sprintf("%d", len(dat)))
+		c.Writer.Write([]byte(dat))
 	})
 	r.Run() // listen and serve on 0.0.0.0:8080
 }
